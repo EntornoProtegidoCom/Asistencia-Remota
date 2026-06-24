@@ -66,8 +66,8 @@
                 <nav>
                     <ul id="menu">
                         <li><a runat="server" href="~/Default">Inicio</a></li>  
-                        <li id="liReporteAccesos" runat="server"><a runat="server" href="~/Reporte/Reporte_accesos">Reporte de accesos</a></li>
-                        <li id="liTrabajadores" runat="server"><a runat="server" href="~/catalogo/trabajadores">Trabajadores</a></li>
+                        <li id="liReporteAccesos" runat="server"><a runat="server" href="~/Reporte/Reporte_accesos">Reportes</a></li>
+                        <li id="liTrabajadores" runat="server"><a runat="server" href="~/catalogo/trabajadores">Colaboradores</a></li>
                         <li id="liValidaHash" runat="server"><a runat="server" href="~/Reporte/Reporte_ValidaReg">Valida accesos</a></li>
                         <%--<li><a runat="server" href="~/About">Acerca de</a></li>--%>
                         <li><a runat="server" href="~/Contact">Contacto</a></li>

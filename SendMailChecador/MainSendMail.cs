@@ -56,6 +56,7 @@ namespace SendMailChecador
             var smtpUser = ConfigurationManager.AppSettings["SmtpUser"];
             var smtpPassword = ConfigurationManager.AppSettings["SmtpPassword"];
             var smtpHost = ConfigurationManager.AppSettings["SmtpHost"];
+            var smtpFallbackHost = ConfigurationManager.AppSettings["SmtpFallbackHost"] ?? "smtp.office365.com";
             var smtpPortValue = ConfigurationManager.AppSettings["SmtpPort"];
             var enviaFoto = ConfigurationManager.AppSettings["EnviaFoto"];
             if (!int.TryParse(smtpPortValue, out var smtpPort))
@@ -64,10 +65,10 @@ namespace SendMailChecador
                 return;
             }
 
-            consultaEnviosPendientes(smtpHost, smtpPort, smtpUser, smtpPassword, enviaFoto);
+            consultaEnviosPendientes(smtpHost, smtpPort, smtpUser, smtpPassword, enviaFoto, smtpFallbackHost);
         }
 
-        internal static void consultaEnviosPendientes(string smtpHost, int smtpPort, string smtpUser, string smtpPassword, string enviaFoto)
+        internal static void consultaEnviosPendientes(string smtpHost, int smtpPort, string smtpUser, string smtpPassword, string enviaFoto, string smtpFallbackHost = null)
         {
             string xmlParam = string.Empty;
             bool incluirFotoEnCorreo = string.Equals(enviaFoto, "1", StringComparison.Ordinal);
@@ -161,7 +162,7 @@ namespace SendMailChecador
                 {
                     var r = registros[i];
                     Log($"Correo={r.Correo} | {r.NombreCompleto} | {r.TipoRegistro} | {r.HoraRegistro} | Hash={r.HashRegistro} | IDRegistro={r.IDRegistro}");
-                    if (EnviarCorreo(r, smtpHost, smtpPort, smtpUser, smtpPassword, incluirFotoEnCorreo))
+                    if (EnviarCorreo(r, smtpHost, smtpPort, smtpUser, smtpPassword, incluirFotoEnCorreo, smtpFallbackHost))
                     {
                         if (MarcarRegistroComoEnviado(r.IDRegistro))
                             Log($"Marcado como enviado: {r.IDRegistro}");
@@ -230,7 +231,7 @@ namespace SendMailChecador
             }
         }
 
-        private static bool EnviarCorreo(RegistroPendiente r, string host, int port, string user, string password, bool incluirFotoEnCorreo)
+        private static bool EnviarCorreo(RegistroPendiente r, string host, int port, string user, string password, bool incluirFotoEnCorreo, string fallbackHost)
         {
             if (string.IsNullOrWhiteSpace(r.Correo))
             {
@@ -243,6 +244,7 @@ namespace SendMailChecador
                 using (var client = new SmtpClient(host, port))
                 {
                     client.EnableSsl = true;
+                    client.UseDefaultCredentials = false;
                     client.Credentials = new NetworkCredential(user, password);
 
                     var mail = new MailMessage
@@ -309,8 +311,25 @@ Hash: {r.HashRegistro}</p>
                     }
 
                     mail.To.Add(r.Correo);
-                    client.Send(mail);
-                    Log($"Correo enviado a {r.Correo} | IDRegistro={r.IDRegistro} | FotoEmbebida={(fotoEmbebidaEnCorreo ? "SI" : "NO")}");
+                    try
+                    {
+                        client.Send(mail);
+                        Log($"Correo enviado a {r.Correo} | IDRegistro={r.IDRegistro} | HostSMTP={host} | FotoEmbebida={(fotoEmbebidaEnCorreo ? "SI" : "NO")}");
+                    }
+                    catch (SmtpException smtpEx) when (DebeReintentarConFallbackHve(smtpEx, host, fallbackHost))
+                    {
+                        Log($"Error SMTP HVE detectado para {r.Correo}. Se reintentará con host alterno '{fallbackHost}'. Detalle: {smtpEx.Message}", true);
+
+                        using (var fallbackClient = new SmtpClient(fallbackHost, port))
+                        {
+                            fallbackClient.EnableSsl = true;
+                            fallbackClient.UseDefaultCredentials = false;
+                            fallbackClient.Credentials = new NetworkCredential(user, password);
+                            fallbackClient.Send(mail);
+                        }
+
+                        Log($"Correo enviado a {r.Correo} | IDRegistro={r.IDRegistro} | HostSMTP={fallbackHost} (fallback) | FotoEmbebida={(fotoEmbebidaEnCorreo ? "SI" : "NO")}");
+                    }
                     return true;
                 }
             }
@@ -319,6 +338,21 @@ Hash: {r.HashRegistro}</p>
                 Log($"Error enviando correo a {r.Correo}: {ex.Message}", true);
                 return false;
             }
+        }
+
+        private static bool DebeReintentarConFallbackHve(SmtpException ex, string host, string fallbackHost)
+        {
+            if (string.IsNullOrWhiteSpace(fallbackHost))
+                return false;
+
+            if (string.Equals(host, fallbackHost, StringComparison.OrdinalIgnoreCase))
+                return false;
+
+            string msg = ex.ToString();
+            return msg.IndexOf("5.2.240", StringComparison.OrdinalIgnoreCase) >= 0
+                || msg.IndexOf("5.7.57", StringComparison.OrdinalIgnoreCase) >= 0
+                || msg.IndexOf("HVE service", StringComparison.OrdinalIgnoreCase) >= 0
+                || msg.IndexOf("Client not authenticated to send mail", StringComparison.OrdinalIgnoreCase) >= 0;
         }
 
         private static string ObtenerMediaTypeImagen(byte[] bytes)

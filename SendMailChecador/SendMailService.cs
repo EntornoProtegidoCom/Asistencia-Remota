@@ -14,14 +14,14 @@ namespace SendMailChecador
         private EventLog _eventLog;
         private const string EventSource = "SendMailChecadorService";
         private const string EventLogName = "Application";
-        
+
         public SendMailService()
-        {            
+        {
             ServiceName = EventSource;
             CanStop = true;
             CanPauseAndContinue = false;
             AutoLog = true;
-            ProcessCycle();
+            //ProcessCycle();
             InitializeComponent();
         }
 
@@ -103,6 +103,7 @@ namespace SendMailChecador
                 var smtpUser = ConfigurationManager.AppSettings["SmtpUser"];
                 var smtpPassword = ConfigurationManager.AppSettings["SmtpPassword"];
                 var smtpHost = ConfigurationManager.AppSettings["SmtpHost"];
+                var smtpFallbackHost = ConfigurationManager.AppSettings["SmtpFallbackHost"] ?? "smtp.office365.com";
                 var smtpPortValue = ConfigurationManager.AppSettings["SmtpPort"];
                 var enviaFoto = ConfigurationManager.AppSettings["EnviaFoto"];
                 if (!int.TryParse(smtpPortValue, out var smtpPort))
@@ -111,7 +112,7 @@ namespace SendMailChecador
                     return;
                 }
 
-                MainSendMail.consultaEnviosPendientes(smtpHost, smtpPort, smtpUser, smtpPassword, enviaFoto);
+                MainSendMail.consultaEnviosPendientes(smtpHost, smtpPort, smtpUser, smtpPassword, enviaFoto, smtpFallbackHost);
             }
             catch (Exception ex)
             {

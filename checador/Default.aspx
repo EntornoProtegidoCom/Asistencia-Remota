@@ -162,7 +162,7 @@
 
     <div class="content-wrapper">
         <hgroup class="title">                
-            <h2>Bienvenido al sistema checador remoto.</h2>
+            <h2>Bienvenido al sistema de control de asistencia.</h2>
         </hgroup>
     </div>
 
