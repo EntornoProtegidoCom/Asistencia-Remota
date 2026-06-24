@@ -1,0 +1,100 @@
+﻿using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Web;
+using System.Web.UI;
+using System.Web.UI.WebControls;
+using System.Data;
+using System.Security;
+using checador;
+
+public partial class Account_Login : Page
+{
+    protected void Page_Load(object sender, EventArgs e)
+    {
+        RegisterHyperLink.NavigateUrl = "Register";
+        //OpenAuthLogin.ReturnUrl = Request.QueryString["ReturnUrl"];
+
+        var returnUrl = HttpUtility.UrlEncode(Request.QueryString["ReturnUrl"]);
+        if (!String.IsNullOrEmpty(returnUrl))
+        {
+            RegisterHyperLink.NavigateUrl += "?ReturnUrl=" + returnUrl;
+        }
+    }
+
+     protected void btnLogin_Click(object sender, EventArgs e)
+    {
+        // Construye XML para el SP (accion C = comprobar)
+        string xmlparam = "<root><accion>C</accion>";
+
+        if (!string.IsNullOrWhiteSpace(UserName.Text))
+        {
+            xmlparam += "<usuario>" + SecurityElement.Escape(UserName.Text.Trim()) + "</usuario>";
+        }
+
+        if (!string.IsNullOrWhiteSpace(Password.Text))
+        {
+            xmlparam += "<password>" + SecurityElement.Escape(Password.Text.Trim()) + "</password>";
+        }
+
+        xmlparam += "</root>";
+
+        try
+        {
+            // Limpia mensaje anterior si existe
+            try { lblMensaje.Text = ""; } catch { }
+
+            // Obtén cadena de conexión desde sesión
+            object connObj = Session["ConnString"];
+            if (connObj == null)
+            {
+                try { lblMensaje.Text = "Cadena de conexión no disponible."; } catch { }
+                return;
+            }
+            ReaderAndWriter.ConnectionString = connObj.ToString();
+
+            // Llama al SP del proyecto
+            DataSet dts = ReaderAndWriter.OneParameterStoreProcCaller(Constants.sp_seguridad_usuarios, xmlparam, ReaderAndWriter.ConnectionString);
+
+            if (dts != null && dts.Tables.Count > 0 && dts.Tables[0].Rows.Count > 0)
+            {
+                string status = dts.Tables[0].Rows[0][0].ToString();
+
+                if (status == "1")
+                {
+                    // Credenciales válidas: guarda lo necesario en sesión y redirige
+                    Session["UserID"] = UserName.Text.Trim();
+
+                    string returnUrlRaw = Request.QueryString["ReturnUrl"];
+                    if (!String.IsNullOrEmpty(returnUrlRaw))
+                    {
+                        Response.Redirect(returnUrlRaw);
+                    }
+                    else
+                    {
+                        Response.Redirect("~/Default.aspx");
+                    }
+                    return;
+                }
+                else
+                {
+                    string msg = "Usuario o contraseña incorrectos.";
+                    if (dts.Tables[0].Rows[0].ItemArray.Length > 1)
+                    {
+                        msg = dts.Tables[0].Rows[0][1].ToString();
+                    }
+                    try { lblMensaje.Text = msg; } catch { }
+                }
+            }
+            else
+            {
+                try { lblMensaje.Text = "Respuesta inválida del servidor."; } catch { }
+            }
+        }
+        catch (Exception ex)
+        {
+            try { utileriasWEB.ManejaError(ex, Constants.sp_seguridad_usuarios, lblMensaje); }
+            catch { try { lblMensaje.Text = "Ocurrió un error al validar credenciales."; } catch { } }
+        }
+    }
+}
